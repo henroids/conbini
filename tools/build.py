@@ -10,7 +10,7 @@ import pycdlib, lzs, lzs_comp, pac as pacmod, asciipatch
 SECTOR = 2048
 
 import re
-CODE = re.compile(r'/n|/r|/w|/k[A-Z]?|/I\d+|%[0-9]*[sdx]')
+CODE = re.compile(r'/n|/N|/r|/w|/k[A-Z]?|/I\d+|/\d|%[-0-9.]*[sdxc]|%%')
 
 def fullwidth(s):
     """Convert ASCII to full-width Shift-JIS-able chars, leaving control codes untouched."""

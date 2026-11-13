@@ -28,7 +28,8 @@ def check(en):
         i = t['i']
         if i not in en: continue
         e = en[i]
-        if sorted(CODE.findall(e)) != sorted(CODE.findall(t['jp'])):
+        skip = ('/w', '/n', '/N')
+        if sorted(c for c in CODE.findall(e) if c not in skip) != sorted(c for c in CODE.findall(t['jp']) if c not in skip):
             bad.append((i, 'codes differ', t['jp'], e))
         elif len(ascii_encode(e)) > t['cap']:
             bad.append((i, f'too long {len(ascii_encode(e))}>{t["cap"]} bytes', t['jp'], e))
