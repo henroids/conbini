@@ -77,6 +77,21 @@ def update_checksum(elf, name, data, report):
         o += 16
     report.append(f'checksum updated for {name} ({found} table entr{"y" if found == 1 else "ies"})')
 
+def update_signature(elf, old, new, label, report):
+    """Rows of (name ptr, size, sum, xor) exist for whole files AND for each PAC entry.
+    Find every row describing `old` by its exact (size, sum, xor) and rewrite it for `new`."""
+    s0, x0 = checksum(old)
+    pat = struct.pack('<III', len(old), s0, x0)
+    s1, x1 = checksum(new)
+    rep = struct.pack('<III', len(new), s1, x1)
+    n = 0; p = elf.find(pat)
+    while p >= 0:
+        elf[p:p + 12] = rep; n += 1
+        p = elf.find(pat, p + 12)
+    report.append(f'signature rows updated for {label}: {n}')
+    if n == 0:
+        report.append(f'WARNING: no signature row found for {label}')
+
 def iso_record(iso, path):
     rec = iso.get_record(iso_path=path)
     return rec.extent_location(), rec.data_length
@@ -124,7 +139,9 @@ def main(orig_iso, lines_json, tr_tsv, out_iso):
         if key in by_file:
             dec = bytearray(lzs.decompress(raw) if raw[:4] == b'LZS\0' else raw)
             if apply(dec, by_file[key], tr, report, key):
+                old_raw = raw
                 raw = lzs_comp.compress(bytes(dec)) if raw[:4] == b'LZS\0' else bytes(dec)
+                update_signature(elf, old_raw, raw, f'CN3 entry {k}', report)
         blobs.append(raw)
     # Prefer in-place: every entry keeps its offset if it still fits in its slot.
     out = bytearray(cn3)
