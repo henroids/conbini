@@ -1,4 +1,4 @@
-# Za Conbini 3 English Translation (PS2, SLPM-62322)
+# The Conbini 3 (ザコンビニ3) English Translation (PS2, SLPM-62322)
 
 Fan translation of *The Conveni 3: Ano Machi o Dokusen seyo* into casual English, plus learning tools for studying the game's Japanese.
 
@@ -26,5 +26,5 @@ chdman extractcd -i game.chd -o orig.cue -ob orig.bin
 # convert orig.bin to a 2048-byte game.iso (user data at offset 24 of each sector)
 python3 tools/build.py game.iso lines.json translations.tsv patched.iso
 python3 tools/cdsector.py orig.bin patched.iso patched.bin
-chdman createcd -i patched.cue -o "Za Conbini 3 (EN).chd"
+chdman createcd -i patched.cue -o "The Conbini 3 (EN).chd"
 ```
