@@ -34,10 +34,15 @@ def ascii_encode(s):
     """Plain-letter mode (needs asciipatch). Control codes stay as-is; '/', '<', '>' in
     prose become full-width; every control code starts on an even byte and the whole
     string has even length, because some engine helpers walk text 2 bytes at a time."""
-    out = bytearray(); pos = 0
+    out = bytearray(); pos = 0; quote_open = False
     for m in list(CODE.finditer(s)) + [None]:
         end = m.start() if m else len(s)
-        seg = ''.join(ESCAPE.get(c, c) for c in s[pos:end])
+        seg = ''
+        for c in s[pos:end]:
+            if c == '"':                      # font has no curly quotes: use 「 」
+                seg += '\u300d' if quote_open else '\u300c'; quote_open = not quote_open
+            else:
+                seg += ESCAPE.get(c, c)
         out += seg.encode('cp932')
         if len(out) % 2:
             out += b' '
@@ -179,15 +184,25 @@ def main(orig_iso, lines_json, tr_tsv, out_iso):
             out[off:slots[k]] = b + b'\0' * (slots[k] - off - len(b))
             struct.pack_into('<II', out, 12 + 8 * k, off, len(b))
     else:
-        report.append('CN3 entries repacked (an entry outgrew its slot)')
-        hsize = 12 + 8 * len(blobs)
-        out = bytearray(entries[0][0])
-        out[:12] = struct.pack('<4sII', b'PAC\0', hsize, len(blobs))
-        for k, b in enumerate(blobs):
+        # Compact repack: same header, entries re-laid sequentially on 0x800 boundaries,
+        # file padded back to its ORIGINAL size so the program's file table still matches.
+        # Entries before the first overflow keep their exact offsets; from there on,
+        # pack with 16-byte alignment (the game loads and checksums the whole file).
+        first = next(k for k, b in enumerate(blobs) if len(b) > slots[k] - entries[k][0])
+        out = bytearray(cn3[:entries[first][0]])
+        for k in range(first):
+            struct.pack_into('<II', out, 12 + 8 * k, entries[k][0], len(blobs[k]))
+            out[entries[k][0]:entries[k][0] + len(blobs[k])] = blobs[k]
+        for k in range(first, len(blobs)):
+            b = blobs[k]
             off = len(out)
             struct.pack_into('<II', out, 12 + 8 * k, off, len(b))
             out += b
-            out += b'\0' * ((-len(out)) % 0x800)
+            out += b'\0' * ((-len(out)) % 0x10)
+        if len(out) > len(cn3):
+            raise SystemExit(f'CN3.PAC would grow by {len(out) - len(cn3)} bytes; shorten text in the overflowing entries')
+        out += b'\0' * (len(cn3) - len(out))
+        report.append(f'CN3 entries shifted to fit (file size unchanged, {len(cn3) - len(out.rstrip(bytes(1)))} bytes spare)')
     new_cn3 = bytes(out)
     if new_cn3 != cn3:
         update_checksum(elf, 'cn3.pac', new_cn3, report)

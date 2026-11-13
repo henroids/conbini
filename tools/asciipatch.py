@@ -93,6 +93,7 @@ def build_cave():
     return blob, CAVE, cave_m
 
 NOP = b'\0\0\0\0'
+SPACE_WIDTH = 7
 
 def apply(elf):
     """Patch a bytearray holding SLPM_623.22 in place."""
@@ -113,6 +114,13 @@ def apply(elf):
     put(0x1bcc54, asm(f'jal {cave_m:#x}', 0x1bcc54)[:4])
     put(0x1bcc5c, NOP)       # sll v0,v0,8
     put(0x1bcc64, NOP)       # addu v1,v1,v0
+
+    # half-width space: ASCII 0x20 advances by 15px (same as a kanji); make it 7px.
+    # (full-width space 0x8140 uses separate constants and is left alone)
+    for va in (0x1bb9f0, 0x1bba2c, 0x1bc920, 0x1bc95c):
+        o = va - VA_TO_FILE
+        assert elf[o:o + 2] == b'\x0f\x00', hex(va)
+        elf[o:o + 2] = struct.pack('<H', SPACE_WIDTH)
 
 if __name__ == '__main__':
     blob, d, m = build_cave()
