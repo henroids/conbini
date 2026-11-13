@@ -1,0 +1,11 @@
+# Never commit game data
+*.iso
+*.bin
+*.cue
+*.chd
+*.xdelta
+work/
+out/
+*.json
+*.tsv
+__pycache__/
