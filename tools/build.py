@@ -5,28 +5,53 @@ Prefix en with "FW:" to encode it as full-width Shift-JIS (fallback test).
 """
 import sys, os, struct, json, shutil, csv
 sys.path.insert(0, os.path.dirname(__file__))
-import pycdlib, lzs, lzs_comp, pac as pacmod
+import pycdlib, lzs, lzs_comp, pac as pacmod, asciipatch
 
 SECTOR = 2048
 
+import re
+CODE = re.compile(r'/n|/r|/w|/k[A-Z]?|/I\d+|%[0-9]*[sdx]')
+
 def fullwidth(s):
-    out = []
-    i = 0
-    while i < len(s):
-        if s[i] == '/' and i + 1 < len(s):          # keep control codes like /n as-is
-            j = i + 2
-            while j < len(s) and s[j].isdigit(): j += 1
-            out.append(s[i:j]); i = j; continue
-        c = s[i]
-        if c == ' ': out.append('　')
-        elif '!' <= c <= '~': out.append(chr(ord(c) + 0xFEE0))
-        else: out.append(c)
-        i += 1
+    """Convert ASCII to full-width Shift-JIS-able chars, leaving control codes untouched."""
+    out = []; pos = 0
+    for m in list(CODE.finditer(s)) + [None]:
+        end = m.start() if m else len(s)
+        for c in s[pos:end]:
+            if c == ' ': out.append('　')
+            elif c == '-': out.append('ー' if False else '－')
+            elif c == "'": out.append('’')
+            elif c == '"': out.append('”')
+            elif c == '~': out.append('～')
+            elif '!' <= c <= '~': out.append(chr(ord(c) + 0xFEE0))
+            else: out.append(c)
+        if m: out.append(m.group()); pos = m.end()
     return ''.join(out)
+
+ESCAPE = {'/': '／', '<': '＜', '>': '＞'}   # these bytes are engine commands
+
+def ascii_encode(s):
+    """Plain-letter mode (needs asciipatch). Control codes stay as-is; '/', '<', '>' in
+    prose become full-width; every control code starts on an even byte and the whole
+    string has even length, because some engine helpers walk text 2 bytes at a time."""
+    out = bytearray(); pos = 0
+    for m in list(CODE.finditer(s)) + [None]:
+        end = m.start() if m else len(s)
+        seg = ''.join(ESCAPE.get(c, c) for c in s[pos:end])
+        out += seg.encode('cp932')
+        if len(out) % 2:
+            out += b' '
+        if m:
+            out += m.group().encode('ascii'); pos = m.end()
+    if len(out) % 2:
+        out += b' '
+    return bytes(out)
 
 def encode(en):
     if en.startswith('FW:'):
-        en = fullwidth(en[3:])
+        return fullwidth(en[3:]).encode('cp932')
+    if en.startswith('AS:'):
+        return ascii_encode(en[3:])
     return en.encode('cp932')
 
 def load_tr(path):
@@ -127,6 +152,7 @@ def main(orig_iso, lines_json, tr_tsv, out_iso):
 
     # --- main executable, patched in place
     elf = bytearray(data[elf_lba * SECTOR: elf_lba * SECTOR + elf_size])
+    asciipatch.apply(elf)
     apply(elf, by_file.get('files/SLPM_623.22', []), tr, report, 'ELF')
 
     # --- CN3.PAC: patch decompressed entries, recompress, rebuild container

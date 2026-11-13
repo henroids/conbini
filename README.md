@@ -9,7 +9,8 @@ No game data lives in this repo. You need your own disc image.
 - **PAC/CN3.PAC**: a `PAC` container (`"PAC\0"`, header size, count, then `(offset, size)` pairs). Most entries are `LZS` (LZSS, 4 KB window, ring start 0xFEE).
 - Control codes inside strings: `/n` newline, `/r`, `/kA`/`/kB`, `/w`, `/I100` and `/I101` (memory card and slot names), `%s` and `%d`.
 - The program has a built-in file table at file offset `0x174930`. Each entry is a name pointer, the size, then the 32-bit **sum** and **XOR** of every u32 word in the file. The game checks these on load and hangs on "Now Loading" if they don't match. A second table of the same row format (at `0x23c030`) covers each entry inside CN3.PAC, using the compressed size, sum and XOR. `build.py` finds every row matching a changed file or entry by its original (size, sum, xor) and rewrites it. Keep files at their original size and position.
-- The game has an ASCII font (`font16.ext` in ALLDATA.PAC), so English can be written as plain single-byte text.
+- The text engine (draw `0x1bb910`, measure `0x1bc8c8`) reads every non-command byte as a 2-byte Shift-JIS code, so plain ASCII renders blank. `tools/asciipatch.py` hooks both routines (calls placed at `0x1bbed8` and `0x1bcc54`) and maps bytes below 0x80 to their full-width glyphs through a 96-entry table. The patch code lives in an unused debug-dump function at `0x199f50`.
+- Engine commands: a bare `/`, `<` or `>` triggers a control code, so prose uses the full-width forms. Some helpers walk text 2 bytes at a time, so every control code must start at an even byte offset and every string must have even length (`build.py` pads with spaces).
 
 ## Tools
 | script | purpose |
