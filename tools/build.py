@@ -54,6 +54,29 @@ def apply(buf, lines, tr, report, fname):
         changed = True
     return changed
 
+TABLE_OFF = 0x174930      # file table in SLPM_623.22: (name ptr, size, sum, xor)
+VA_DELTA = 0x10f000       # data segment VA -> file offset
+
+def checksum(d):
+    n = len(d) // 4
+    s = x = 0
+    for v in struct.unpack_from(f'<{n}I', d):
+        s = (s + v) & 0xFFFFFFFF; x ^= v
+    return s, x
+
+def update_checksum(elf, name, data, report):
+    """The game sums/xors every u32 of a loaded file and hangs if it doesn't match."""
+    o = TABLE_OFF; found = 0
+    while True:
+        p, size = struct.unpack_from('<II', elf, o)
+        if not (0x500000 < p < 0x600000): break
+        q = p - VA_DELTA
+        if elf[q:elf.index(b'\0', q)].decode('ascii', 'replace') == name:
+            s, x = checksum(data[:size])
+            struct.pack_into('<II', elf, o + 8, s, x); found += 1
+        o += 16
+    report.append(f'checksum updated for {name} ({found} table entr{"y" if found == 1 else "ies"})')
+
 def iso_record(iso, path):
     rec = iso.get_record(iso_path=path)
     return rec.extent_location(), rec.data_length
@@ -90,7 +113,6 @@ def main(orig_iso, lines_json, tr_tsv, out_iso):
     # --- main executable, patched in place
     elf = bytearray(data[elf_lba * SECTOR: elf_lba * SECTOR + elf_size])
     apply(elf, by_file.get('files/SLPM_623.22', []), tr, report, 'ELF')
-    data[elf_lba * SECTOR: elf_lba * SECTOR + elf_size] = elf
 
     # --- CN3.PAC: patch decompressed entries, recompress, rebuild container
     cn3 = bytes(data[cn3_lba * SECTOR: cn3_lba * SECTOR + cn3_size])
@@ -124,6 +146,9 @@ def main(orig_iso, lines_json, tr_tsv, out_iso):
             out += b
             out += b'\0' * ((-len(out)) % 0x800)
     new_cn3 = bytes(out)
+    if new_cn3 != cn3:
+        update_checksum(elf, 'cn3.pac', new_cn3, report)
+    data[elf_lba * SECTOR: elf_lba * SECTOR + elf_size] = elf
 
     if len(new_cn3) <= cn3_size:
         data[cn3_lba * SECTOR: cn3_lba * SECTOR + cn3_size] = new_cn3 + b'\0' * (cn3_size - len(new_cn3))

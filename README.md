@@ -8,7 +8,7 @@ No game data lives in this repo. You need your own disc image.
 - **SLPM_623.22** (main program): menus, help pages, item descriptions. Shift-JIS, NUL-terminated, in fixed slots. Edited in place.
 - **PAC/CN3.PAC**: a `PAC` container (`"PAC\0"`, header size, count, then `(offset, size)` pairs). Most entries are `LZS` (LZSS, 4 KB window, ring start 0xFEE).
 - Control codes inside strings: `/n` newline, `/r`, `/kA`/`/kB`, `/w`, `/I100` and `/I101` (memory card and slot names), `%s` and `%d`.
-- The program has a built-in file table (name, size, hash) at file offset `0x174930`. Keep every file at its original size and position.
+- The program has a built-in file table at file offset `0x174930`. Each entry is a name pointer, the size, then the 32-bit **sum** and **XOR** of every u32 word in the file. The game checks these on load and hangs on "Now Loading" if they don't match. `build.py` recalculates them for every file it changes. Keep files at their original size and position.
 - The game has an ASCII font (`font16.ext` in ALLDATA.PAC), so English can be written as plain single-byte text.
 
 ## Tools
